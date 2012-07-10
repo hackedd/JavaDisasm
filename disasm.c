@@ -15,7 +15,7 @@ void disassemble(const char* filename)
 	Method* method;
 	Field* field;
 	Attribute* codeAttribute;
-	char buffer[1024], constantInfo[10];
+	char buffer[1024], constantInfo[10], *dot, localClassName[128];
 
 	classFile = read_class_file(filename);
 	if (classFile == NULL)
@@ -61,6 +61,10 @@ void disassemble(const char* filename)
 
 	fprintf(stdout, "%s class ", access_flags_to_string(classFile->access_flags));
 	fprintf(stdout, "%s ", class_name_from_internal(className->buffer));
+
+	dot = strrchr(class_name_from_internal(className->buffer), '.');
+	strcpy(localClassName, dot ? dot + 1 : class_name_from_internal(className->buffer));
+
 	if (classFile->super_class)
 	{
 		ref = find_constant(classFile, classFile->super_class);
@@ -81,11 +85,6 @@ void disassemble(const char* filename)
 
 	fprintf(stdout, "\n");
 	fprintf(stdout, "{\n");
-
-	// fprintf(stdout, "Interfaces: %hd\n", classFile->interface_count);
-	// fprintf(stdout, "Fields:     %hd\n", classFile->field_count);
-	// fprintf(stdout, "Methods:    %hd\n", classFile->method_count);
-	// fprintf(stdout, "Attributes: %hd\n", classFile->attribute_count);
 
 	for (i = 0, field = classFile->fields; i < classFile->field_count; i += 1, field += 1)
 	{
@@ -110,14 +109,9 @@ void disassemble(const char* filename)
 			descriptor = find_constant(classFile, method->descriptor_index);
 
 			if (strcmp(name->buffer, "<init>") == 0) // Constructor
-			{
-				name = className;
-				descriptor_to_string_ex(descriptor->buffer, name->buffer, buffer, FLAG_OMIT_RETURN_TYPE);
-			}
+				descriptor_to_string_ex(descriptor->buffer, localClassName, buffer, FLAG_OMIT_RETURN_TYPE);
 			else
-			{
 				descriptor_to_string(descriptor->buffer, name->buffer, buffer);
-			}
 
 			fprintf(stdout, "    %s %s\n", access_flags_to_string(method->access_flags), buffer);
 		}
