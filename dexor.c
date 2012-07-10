@@ -14,6 +14,8 @@ int find_xor_key_in_method(ClassFile* classFile, Attribute* codeAttribute, unsig
 int find_xor_method(ClassFile* classFile, Attribute* codeAttribute, uint32_t pc, unsigned char* key);
 int find_xor_key(ClassFile* classFile, unsigned char* key);
 
+static int verbose = 0;
+
 void xorcrypt(uint32_t* buf, int length, unsigned char* key, int keylen)
 {
 	uint32_t *in, *out, *endptr = buf + length;
@@ -70,7 +72,8 @@ int find_xor_key_in_method(ClassFile* classFile, Attribute* codeAttribute, unsig
 
 		if (ins.opcode == OP_TABLESWITCH && ins.low == 0)
 		{
-			// fprintf(stderr, "Found tableswitch at %d, cases %d - %d\n", pc, ins.low, ins.high);
+			if (verbose > 1)
+				fprintf(stderr, "Found tableswitch at %d, cases %d - %d\n", pc, ins.low, ins.high);
 
 			for (i = 0; i <= ins.high - ins.low; i += 1)
 				key[i] = find_xor_byte(codeAttribute, pc + ins.branchoffsets[i]);
@@ -128,7 +131,7 @@ int find_xor_method(ClassFile* classFile, Attribute* codeAttribute, uint32_t pc,
 	methodRef = find_constant(classFile, ins.constant);
 	if (methodRef == NULL)
 	{
-		fprintf(stderr, "Unable to method (#%d)\n", ins.constant);
+		fprintf(stderr, "Unable to find method (#%d)\n", ins.constant);
 		return 0;
 	}
 
@@ -156,7 +159,8 @@ int find_xor_method(ClassFile* classFile, Attribute* codeAttribute, uint32_t pc,
 		methodType.param_count == 1 && methodType.params[0].type == TYPE_ARRAY && 
 		strcmp(methodType.params[0].elementType->name, "char") == 0)
 	{
-		// fprintf(stderr, "Looking for method with name #%hd and descriptor #%hd\n", methodRef->nameref, methodRef->typedescref);
+		if (verbose > 1)
+			fprintf(stderr, "Looking for method with name #%hd and descriptor #%hd\n", methodRef->nameref, methodRef->typedescref);
 
 		for (i = 0, method = classFile->methods; i < classFile->method_count; i += 1, method += 1)
 		{
@@ -231,13 +235,31 @@ int find_xor_key(ClassFile* classFile, unsigned char* key)
 
 int main(int argc, char** argv)
 {
-	int i, j, length, keylen;
+	int i, j, length, keylen, opt;
 	ClassFile *classFile;
 	Constant *classRef, *className, *c, *string;
 	unsigned char key[128];
 	uint32_t wbuffer[1024];
 
-	for (i = 1; i < argc; i += 1)
+	while ((opt = getopt(argc, argv, "vh")) != -1)
+	{
+		switch (opt)
+		{
+			case 'v':
+				verbose += 1;
+				break;
+
+			case 'h':
+			case '?':
+				printf("Usage: %s [options] CLASSFILE...\n"
+					"options:\n"
+					"  -v  increase verbosity (can be specified multiple times)\n"
+					"", argv[0]);
+				return optopt ? 1 : 0;
+		}
+	}
+
+	for (i = optind; i < argc; i += 1)
 	{
 		classFile = read_class_file(argv[i]);
 		if (classFile == NULL)
@@ -256,10 +278,13 @@ int main(int argc, char** argv)
 		}
 		else
 		{
-			printf("%s: ", class_name_from_internal(className->buffer));
-			for (j = 0; j < keylen; j += 1)
-				printf("%02x ", key[j]);
-			printf("\n");
+			if (verbose)
+			{
+				printf("%s  key: ", class_name_from_internal(className->buffer));
+				for (j = 0; j < keylen; j += 1)
+					printf("%02x ", key[j]);
+				printf("\n");
+			}
 
 			for (c = classFile->constants, j = 0; j < classFile->constant_count; j += 1, c += 1)
 			{
@@ -267,28 +292,20 @@ int main(int argc, char** argv)
 					continue;
 
 				string = find_constant(classFile, c->ref);
-
 				length = u8_toucs(wbuffer, sizeof(wbuffer) / sizeof(wbuffer[0]), string->buffer, string->length);
 
-				// printf("u ");
-				// print_string(stdout, string->buffer);
-				// printf("\n");
-
-				// printf("i ");
-				// print_string_w(stdout, wbuffer);
-				// printf("\n");
+				if (verbose > 1)
+				{
+					printf("%s  raw: ", class_name_from_internal(className->buffer));
+					print_string(stdout, string->buffer);
+					printf("\n");
+				}
 
 				xorcrypt(wbuffer, length - 1, key, keylen);
-				
-				// printf("o ");
+
+				printf("%s %4d: ", class_name_from_internal(className->buffer), c->index);
 				print_string_w(stdout, wbuffer);
 				printf("\n");
-
-				// printf("\n");
-
-				// u8_toutf8(buffer, sizeof(buffer) / sizeof(buffer[0]), wbuffer, length);
-				
-				// printf("%s\n", buffer);
 			}
 		}
 
