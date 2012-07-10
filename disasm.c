@@ -73,7 +73,8 @@ void disassemble(const char* filename)
 		fprintf(stdout, " implements");
 		for (i = 0; i < classFile->interface_count; i += 1)
 		{
-			name = find_constant(classFile, classFile->interfaces[i]);
+			ref = find_constant(classFile, classFile->interfaces[i]);
+			name = find_constant(classFile, ref->ref);
 			fprintf(stdout, " %s", class_name_from_internal(name->buffer));
 		}
 	}
