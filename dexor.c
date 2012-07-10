@@ -51,8 +51,14 @@ uint8_t find_xor_byte(Attribute* codeAttribute, uint32_t start_pc)
 	for (pc = start_pc; pc < codeAttribute->code.code_length; )
 	{
 		size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
+
+		if (ins.opcode >= OP_ICONST_0 && ins.opcode <= OP_ICONST_5)
+			return ins.opcode - OP_ICONST_0;
 		if (ins.opcode == OP_BIPUSH)
 			return ins.uint8;
+		// does this happen?
+		if (ins.opcode == OP_SIPUSH)
+			return ins.uint16 & 0xFF;
 		pc += size;
 	}
 
@@ -292,7 +298,7 @@ int main(int argc, char** argv)
 					continue;
 
 				string = find_constant(classFile, c->ref);
-				length = u8_toucs(wbuffer, sizeof(wbuffer) / sizeof(wbuffer[0]), string->buffer, string->length);
+				length = u8_toucs(wbuffer, sizeof(wbuffer) / sizeof(wbuffer[0]), string->buffer, string->length + 1);
 
 				if (verbose > 1)
 				{
