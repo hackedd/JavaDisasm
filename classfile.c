@@ -101,12 +101,8 @@ int read_constants(FILE* fp, Constant** constants)
 			fread(buffer, sizeof(char), length, fp);
 			buffer[length] = '\0';
 
-			// FIXME: We completely ignore the fact that there might be
-			//   characters with a code point above 0xFFFF in the input,
-			//   which Java encodes as two UTF-16 surrogate characters,
-			//   and therefore two 3byte UTF-8 sequences.
 			p->buffer = buffer;
-			p->length = length + 1;
+			p->length = length;
 		}
 		else
 		{
