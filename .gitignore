@@ -1,0 +1,7 @@
+*.o
+*.d
+.do_built
+.do_built.dir
+.redo
+dexor
+disasm
