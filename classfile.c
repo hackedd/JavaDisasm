@@ -75,6 +75,18 @@ BaseType BaseTypes[] = {
 	fread(&uint32, sizeof(uint32_t), 1, fp); \
 	field = be32toh(uint32)
 
+#define write16(field) \
+	uint16 = htobe16(field); \
+	fwrite(&uint16, sizeof(uint16_t), 1, fp)
+
+#define write32(field) \
+	uint32 = htobe32(field); \
+	fwrite(&uint32, sizeof(uint32_t), 1, fp)
+
+#define write64(field) \
+	uint64 = htobe64(field); \
+	fwrite(&uint64, sizeof(uint64_t), 1, fp)
+
 
 int read_constants(FILE* fp, Constant** constants)
 {
@@ -159,11 +171,83 @@ int read_constants(FILE* fp, Constant** constants)
 
 		p += 1;
 
+		/* Longs and doubles take up two slots in the table */
 		if (tag == TAG_LONG || tag == TAG_DOUBLE)
-			i += 1; /* Longs and doubles take up two slots in the table */
+			i += 1;
 	}
 
 	return p - *constants;
+}
+
+int write_constants(FILE* fp, uint16_t count, Constant* constants)
+{
+	int i;
+	Constant* c;
+	uint16_t max_index, uint16;
+	uint32_t uint32;
+	uint64_t uint64;
+
+	max_index = count + 1;
+	for (c = constants, i = 0; i < count; c += 1, i += 1)
+	{
+		/* Longs and doubles take up two slots in the table */
+		if (c->tag == TAG_LONG || c->tag == TAG_DOUBLE)
+			max_index += 1;
+	}
+
+	write16(max_index);
+	for (c = constants, i = 0; i < count; c += 1, i += 1)
+	{
+		fwrite(&c->tag, sizeof(uint8_t), 1, fp);
+
+		switch (c->tag)
+		{
+			case TAG_STRING:
+				write16(c->length);
+				fwrite(c->buffer, sizeof(char), c->length, fp);
+				break;
+
+			case TAG_INTEGER:
+				write32(c->intval);
+				break;
+
+			case TAG_FLOAT:
+				fwrite(&c->floatval, sizeof(float), 1, fp);
+				break;
+
+			case TAG_LONG:
+				write64(c->longval);
+				break;
+
+			case TAG_DOUBLE:
+				fwrite(&c->doubleval, sizeof(double), 1, fp);
+				break;
+
+			case TAG_CLASSREF:
+			case TAG_STRINGREF:
+				write16(c->ref);
+				break;
+
+			case TAG_FIELDREF:
+			case TAG_METHODREF:
+			case TAG_IFACEREF:
+				write16(c->classref);
+				write16(c->typedescref);
+				break;
+
+			case TAG_TYPEDESC:
+				write16(c->nameref);
+				write16(c->typeref);
+				break;
+
+			default:
+				fprintf(stderr, "Error: Invalid Constant tag: %d\n", c->tag);
+				return 0;
+				break;
+		}
+	}
+
+	return 1;
 }
 
 Constant* find_constant(ClassFile* classFile, int index)
@@ -327,6 +411,49 @@ uint16_t read_attributes(FILE* fp, ClassFile* classFile, Attribute** attributes)
 	return count;
 }
 
+int write_attributes(FILE* fp, uint16_t count, Attribute* attributes)
+{
+	int i, j;
+	uint16_t uint16;
+	uint32_t uint32;
+	Attribute* a;
+	ExceptionTableEntry* e;
+
+	write16(count);
+
+	for (a = attributes, i = 0; i < count; a += 1, i += 1)
+	{
+		write16(a->name_index);
+		write32(a->length);
+
+		if (a->type == ATT_CODE)
+		{
+			write16(a->code.max_stack);
+			write16(a->code.max_locals);
+			write32(a->code.code_length);
+
+			fwrite(a->code.code, sizeof(char), a->code.code_length, fp);
+
+			write16(a->code.exception_table_length);
+			for (e = a->code.exception_table, j = 0; j < a->code.exception_table_length; e += 1, j += 1)
+			{
+				write16(e->start_pc);
+				write16(e->end_pc);
+				write16(e->handler_pc);
+				write16(e->catch_type);
+			}
+
+			write_attributes(fp, a->code.attribute_count, a->code.attributes);
+		}
+		else
+		{
+			fwrite(a->buffer, sizeof(char), a->length, fp);
+		}
+	}
+
+	return 1;
+}
+
 Attribute* find_attribute(ClassFile* classFile, const char* name, int attribute_count, Attribute* attributes)
 {
 	Attribute* a;
@@ -420,6 +547,75 @@ ClassFile* read_class(FILE* fp)
 	classFile->attribute_count = read_attributes(fp, classFile, &classFile->attributes);
 
 	return classFile;
+}
+
+int write_class_file(ClassFile* classFile, const char* filename)
+{
+	int ret;
+	FILE* fp;
+
+	if ((fp = fopen(filename, "w")) == NULL)
+	{
+		perror("fopen");
+		return 0;
+	}
+
+	ret = write_class(classFile, fp);
+	fclose(fp);
+
+	return ret;
+}
+
+int write_class(ClassFile* classFile, FILE* fp)
+{
+	ClassFileHeader header;
+	Field* field;
+	Method* method;
+	uint16_t uint16;
+	int i;
+
+	header.magic = htobe32(MAGIC);
+	header.major = htobe16(classFile->header.major);
+	header.minor = htobe16(classFile->header.minor);
+
+	if (fwrite(&header, sizeof(ClassFileHeader), 1, fp) < 1)
+		return 0;
+
+	write_constants(fp, classFile->constant_count, classFile->constants);
+
+	write16(classFile->access_flags);
+	write16(classFile->this_class);
+	write16(classFile->super_class);
+
+	write16(classFile->interface_count);
+	for (i = 0; i < classFile->interface_count; i += 1)
+	{
+		write16(classFile->interfaces[i]);
+	}
+
+	write16(classFile->field_count);
+	for (field = classFile->fields, i = 0; i < classFile->field_count; field += 1, i += 1)
+	{
+		write16(field->access_flags);
+		write16(field->name_index);
+		write16(field->descriptor_index);
+
+		write_attributes(fp, field->attribute_count, field->attributes);
+	}
+
+	write16(classFile->method_count);
+	for (method = classFile->methods, i = 0; i < classFile->method_count; method += 1, i += 1)
+	{
+		write16(method->access_flags);
+		write16(method->name_index);
+		write16(method->descriptor_index);
+
+		write_attributes(fp, method->attribute_count, method->attributes);
+	}
+
+	write_attributes(fp, classFile->attribute_count, classFile->attributes);
+
+	return 1;
 }
 
 void free_class(ClassFile* classFile)

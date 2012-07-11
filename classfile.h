@@ -204,13 +204,20 @@ typedef struct tagTypeDescriptor
 } TypeDescriptor;
 
 int read_constants(FILE* fp, Constant** constants);
+int write_constants(FILE* fp, uint16_t count, Constant* constants);
 void free_constants(int count, Constant* constants);
 
 uint16_t read_attributes(FILE* fp, ClassFile* classFile, Attribute** attributes);
+int write_attributes(FILE* fp, uint16_t count, Attribute* attributes);
+
 Attribute* find_attribute(ClassFile* classFile, const char* name, int attribute_count, Attribute* attributes);
 
 ClassFile* read_class(FILE* fp);
 ClassFile* read_class_file(const char* filename);
+
+int write_class(ClassFile* classFile, FILE* fp);
+int write_class_file(ClassFile* classFile, const char* filename);
+
 void free_class(ClassFile* classFile);
 Constant* find_constant(ClassFile* classFile, int index);
 
