@@ -270,6 +270,77 @@ Constant* find_constant(ClassFile* classFile, int index)
 	return NULL;
 }
 
+Constant* add_constant(ClassFile* classFile, int tag)
+{
+	Constant *c, *prev;
+
+	classFile->constant_count += 1;
+	classFile->constants = realloc(classFile->constants, sizeof(Constant) * classFile->constant_count);
+
+	c = classFile->constants + classFile->constant_count - 1;
+	c->tag = tag;
+
+	if (classFile->constant_count == 1)
+	{
+		c->index = 1;
+	}
+	else
+	{
+		prev = c - 1;
+		if (prev->tag == TAG_LONG || prev->tag == TAG_DOUBLE)
+			c->index = prev->index + 2;
+		else
+			c->index = prev->index + 1;
+	}
+
+	return c;
+}
+
+Constant* add_string_constant(ClassFile* classFile, const char* buffer)
+{
+	Constant* constant = add_constant(classFile, TAG_STRING);
+	constant->buffer = strdup(buffer);
+	constant->length = strlen(constant->buffer);
+	return constant;
+}
+
+uint16_t add_classref(ClassFile* classFile, const char* className)
+{
+	Constant* constant;
+	uint16_t nameIndex;
+
+	constant = add_string_constant(classFile, class_name_to_internal(className));
+	nameIndex = constant->index;
+
+	constant = add_constant(classFile, TAG_CLASSREF);
+	constant->ref = nameIndex;
+
+	return constant->index;
+}
+
+Method* add_method(ClassFile* classFile, const char* methodName, const char* descriptor)
+{
+	Method* method;
+	Constant* constant;
+
+	classFile->method_count += 1;
+	classFile->methods = realloc(classFile->methods, sizeof(Method) * classFile->method_count);
+
+	method = classFile->methods + classFile->method_count - 1;
+
+	method->access_flags = 0;
+	method->attribute_count = 0;
+	method->attributes = NULL;
+
+	constant = add_string_constant(classFile, methodName);
+	method->name_index = constant->index;
+
+	constant = add_string_constant(classFile, descriptor);
+	method->descriptor_index = constant->index;
+
+	return method;
+}
+
 void free_constants(int count, Constant* constants)
 {
 	Constant *p;
@@ -545,6 +616,23 @@ ClassFile* read_class(FILE* fp)
 	}
 
 	classFile->attribute_count = read_attributes(fp, classFile, &classFile->attributes);
+
+	return classFile;
+}
+
+ClassFile* create_class(const char* className)
+{
+	ClassFile* classFile;
+
+	classFile = malloc(sizeof(ClassFile));
+	memset(classFile, 0, sizeof(ClassFile));
+
+	classFile->header.magic = MAGIC;
+	classFile->header.major = 49;
+	classFile->header.minor = 0;
+
+	classFile->this_class = add_classref(classFile, className);
+	classFile->super_class = add_classref(classFile, "java.lang.Object");
 
 	return classFile;
 }
@@ -913,4 +1001,3 @@ const char* class_name_to_internal(const char* name)
 	*out++ = '\0';
 	return buf;
 }
-

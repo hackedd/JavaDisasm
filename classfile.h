@@ -215,11 +215,18 @@ Attribute* find_attribute(ClassFile* classFile, const char* name, int attribute_
 ClassFile* read_class(FILE* fp);
 ClassFile* read_class_file(const char* filename);
 
+ClassFile* create_class(const char* className);
+
 int write_class(ClassFile* classFile, FILE* fp);
 int write_class_file(ClassFile* classFile, const char* filename);
 
 void free_class(ClassFile* classFile);
 Constant* find_constant(ClassFile* classFile, int index);
+Constant* add_constant(ClassFile* classFile, int tag);
+
+uint16_t add_classref(ClassFile* classFile, const char* className);
+
+Method* add_method(ClassFile* classFile, const char* methodName, const char* descriptor);
 
 const char* constant_to_string(ClassFile* classFile, Constant* constant);
 const char* constant_to_string_r(ClassFile* classFile, Constant* constant, char* buffer);
