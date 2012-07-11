@@ -14,4 +14,8 @@
 #error Unknown OS
 #endif
 
+#define swap64(x) x = be64toh(x)
+#define swap32(x) x = be32toh(x)
+#define swap16(x) x = be16toh(x)
+
 #endif

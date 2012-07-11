@@ -231,8 +231,4 @@ const char* descriptor_to_string_ex(const char* descriptor, const char* name, ch
 const char* class_name_from_internal(const char* name);
 const char* class_name_to_internal(const char* name);
 
-#define swap64(x) x = be64toh(x)
-#define swap32(x) x = be32toh(x)
-#define swap16(x) x = be16toh(x)
-
 #endif
