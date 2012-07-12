@@ -95,11 +95,6 @@ uint32_t get_single_instruction(unsigned char* code, Instruction* ins, uint32_t 
 			ins->constant = code[1];
 			return 2;
 
-		case OP_LDC_W:
-		case OP_LDC2_W:
-			ins->constant = be16toh(*(uint16_t*)(code + 1));
-			return 3;
-
 		case OP_ILOAD:
 		case OP_LLOAD:
 		case OP_FLOAD:
@@ -178,6 +173,8 @@ uint32_t get_single_instruction(unsigned char* code, Instruction* ins, uint32_t 
 
 			return offset;
 
+		case OP_LDC_W:
+		case OP_LDC2_W:
 		case OP_GETSTATIC:
 		case OP_PUTSTATIC:
 		case OP_GETFIELD:
@@ -199,7 +196,7 @@ uint32_t get_single_instruction(unsigned char* code, Instruction* ins, uint32_t 
 			return 5;
 
 		case OP_NEWARRAY:
-			/* TODO: Is this a constant reference or just a primitive type? */
+			/* TODO: Should have it's own field? */
 			ins->uint8 = code[1];
 			return 2;
 
@@ -386,6 +383,162 @@ void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, 
 	}
 }
 
+uint32_t instruction_to_bytecode(Instruction* ins, unsigned char* code, uint32_t pc)
+{
+	int offset, i;
+
+	code[0] = ins->opcode;
+	switch (ins->opcode)
+	{
+		case OP_BIPUSH:
+			code[1] = ins->uint8;
+			return 2;
+
+		case OP_SIPUSH:
+			*(uint16_t*)(code + 1) = htobe16(ins->uint16);
+			return 3;
+
+		case OP_LDC:
+			code[1] = ins->constant;
+			return 2;
+
+		case OP_LDC_W:
+		case OP_LDC2_W:
+		case OP_GETSTATIC:
+		case OP_PUTSTATIC:
+		case OP_GETFIELD:
+		case OP_PUTFIELD:
+		case OP_INVOKEVIRTUAL:
+		case OP_INVOKESPECIAL:
+		case OP_INVOKESTATIC:
+		case OP_NEW:
+		case OP_ANEWARRAY:
+		case OP_CHECKCAST:
+		case OP_INSTANCEOF:
+			*(uint16_t*)(code + 1) = htobe16(ins->constant);
+			return 3;
+
+		case OP_INVOKEINTERFACE:
+		case OP_INVOKEDYNAMIC:
+			*(uint16_t*)(code + 1) = htobe16(ins->constant);
+			code[3] = '\0';
+			code[4] = '\0';
+			return 5;
+
+		case OP_ILOAD:
+		case OP_LLOAD:
+		case OP_FLOAD:
+		case OP_DLOAD:
+		case OP_ALOAD:
+		case OP_ISTORE:
+		case OP_LSTORE:
+		case OP_FSTORE:
+		case OP_DSTORE:
+		case OP_ASTORE:
+		case OP_RET:
+			code[1] = ins->varIndex;
+			return 2;
+
+		case OP_IINC:
+			code[1] = ins->varIndex;
+			code[2] = ins->value;
+			return 3;
+
+		case OP_IFEQ:
+		case OP_IFNE:
+		case OP_IFLT:
+		case OP_IFGE:
+		case OP_IFGT:
+		case OP_IFLE:
+		case OP_IF_ICMPEQ:
+		case OP_IF_ICMPNE:
+		case OP_IF_ICMPLT:
+		case OP_IF_ICMPGE:
+		case OP_IF_ICMPGT:
+		case OP_IF_ICMPLE:
+		case OP_IF_ACMPEQ:
+		case OP_IF_ACMPNE:
+		case OP_GOTO:
+		case OP_JSR:
+		case OP_IFNULL:
+		case OP_IFNONNULL:
+			*(uint16_t*)(code + 1) = htobe16(ins->branchoffset);
+			return 3;
+
+		case OP_NEWARRAY:
+			/* TODO: Should have it's own field? */
+			code[1] = ins->uint8;
+			return 2;
+
+		case OP_WIDE:
+			code[1] = ins->opcode2;
+			*(uint16_t*)(code + 2) = htobe16(ins->varIndex16);
+
+			if (ins->opcode2 != OP_IINC)
+				return 4;
+
+			*(uint16_t*)(code + 4) = htobe16(ins->value16);
+			return 6;
+
+		case OP_MULTIANEWARRAY:
+			*(uint16_t*)(code + 1) = htobe16(ins->constant);
+			code[3] = ins->dimensions;
+			return 4;
+
+		case OP_GOTO_W:
+		case OP_JSR_W:
+			*(int32_t*)(code + 1) = htobe32(ins->branchoffset32);
+			return 5;
+
+		case OP_TABLESWITCH:
+			offset = 4 - (pc % 4); // offset is 32bit aligned from pc
+			for (i = 1; i < offset; i += 1)
+				code[i] = '\0';
+
+			*(int32_t*)(code + offset) = htobe32(ins->defaultoffset);
+			offset += 4;
+			*(int32_t*)(code + offset) = htobe32(ins->low);
+			offset += 4;
+			*(int32_t*)(code + offset) = htobe32(ins->high);
+			offset += 4;
+
+			ins->branchoffsets = malloc((ins->high - ins->low + 1) * sizeof(int32_t));
+			for (i = 0; i <= ins->high - ins->low; i += 1)
+			{
+				*(int32_t*)(code + offset) = htobe32(ins->branchoffsets[i]);
+				offset += 4;
+			}
+
+			return offset;
+
+		case OP_LOOKUPSWITCH:
+			offset = 4 - (pc % 4); // offset is 32bit aligned from pc
+			for (i = 1; i < offset; i += 1)
+				code[i] = '\0';
+
+			*(int32_t*)(code + offset) = htobe32(ins->defaultoffset);
+			offset += 4;
+			*(uint32_t*)(code + offset) = htobe32(ins->npairs);
+			offset += 4;
+
+			ins->matches = malloc(ins->npairs * sizeof(int32_t));
+			ins->branchoffsets = malloc(ins->npairs * sizeof(int32_t));
+
+			for (i = 0; i < ins->npairs; i += 1)
+			{
+				*(int32_t*)(code + offset) = htobe32(ins->matches[i]);
+				offset += 4;
+				*(int32_t*)(code + offset) = htobe32(ins->branchoffsets[i]);
+				offset += 4;
+			}
+
+			return offset;
+
+		default:
+			return 1;
+	}
+}
+
 typedef struct
 {
 	uint32_t pc;
@@ -463,6 +616,7 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 	}
 
 	fprintf(fp, "        // Code Length: %d bytes / %d instructions\n", attribute->code.code_length, nins);
+	fprintf(fp, "        // Max Stack: %hd, Max Locals: %hd, Attributes: %hd\n", attribute->code.max_stack, attribute->code.max_locals, attribute->code.attribute_count);
 	fprintf(fp, "        // Branches: %d\n", nbranch);
 	fprintf(fp, "\n");
 

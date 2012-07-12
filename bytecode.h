@@ -322,6 +322,7 @@ typedef struct
 
 void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute);
 void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, char* buf);
+uint32_t instruction_to_bytecode(Instruction* ins, unsigned char* code, uint32_t pc);
 uint32_t get_single_instruction(unsigned char* code, Instruction* ins, uint32_t pc);
 
 #endif
