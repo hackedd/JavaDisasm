@@ -223,7 +223,7 @@ int write_class_file(ClassFile* classFile, const char* filename);
 void free_class(ClassFile* classFile);
 Constant* find_constant(ClassFile* classFile, int index);
 Constant* add_constant(ClassFile* classFile, int tag);
-
+Constant* add_string_constant(ClassFile* classFile, const char* buffer);
 uint16_t add_classref(ClassFile* classFile, const char* className);
 
 Method* add_method(ClassFile* classFile, const char* methodName, const char* descriptor);
