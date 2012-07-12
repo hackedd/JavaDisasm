@@ -486,8 +486,8 @@ int write_attributes(FILE* fp, uint16_t count, Attribute* attributes)
 {
 	int i, j;
 	uint16_t uint16;
-	uint32_t uint32;
-	Attribute* a;
+	uint32_t uint32, length;
+	Attribute *a, *a2;
 	ExceptionTableEntry* e;
 
 	write16(count);
@@ -495,10 +495,19 @@ int write_attributes(FILE* fp, uint16_t count, Attribute* attributes)
 	for (a = attributes, i = 0; i < count; a += 1, i += 1)
 	{
 		write16(a->name_index);
-		write32(a->length);
 
 		if (a->type == ATT_CODE)
 		{
+			length = sizeof(a->code.max_stack) + sizeof(a->code.max_locals) + sizeof(a->code.code_length);
+			length += a->code.code_length;
+			length += sizeof(a->code.exception_table_length) + sizeof(ExceptionTableEntry) * a->code.exception_table_length;
+			length += sizeof(a->code.attribute_count);
+
+			for (a2 = a->code.attributes, i = 0; i < a->code.attribute_count; a2 += 1, i += 1)
+				length += a2->length;
+
+			write32(length);
+
 			write16(a->code.max_stack);
 			write16(a->code.max_locals);
 			write32(a->code.code_length);
@@ -518,6 +527,7 @@ int write_attributes(FILE* fp, uint16_t count, Attribute* attributes)
 		}
 		else
 		{
+			write32(a->length);
 			fwrite(a->buffer, sizeof(char), a->length, fp);
 		}
 	}
