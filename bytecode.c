@@ -239,6 +239,19 @@ uint32_t get_single_instruction(unsigned char* code, Instruction* ins, uint32_t 
 	}
 }
 
+void free_single_instruction(Instruction* ins)
+{
+	if (ins->opcode == OP_TABLESWITCH)
+	{
+		free(ins->branchoffsets);
+	}
+	else if (ins->opcode == OP_LOOKUPSWITCH)
+	{
+		free(ins->matches);
+		free(ins->branchoffsets);
+	}
+}
+
 void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, char* buf)
 {
 	int i;
