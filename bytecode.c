@@ -555,11 +555,11 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 {
 	uint32_t pc, size;
 	Instruction ins;
-	char insbuf[1024], label[128];
+	char insbuf[10240], label[128];
 	Branch branches[MAX_BRANCHES], *branch = branches;
 	int i, nins = 0, nbranch = 0, branchdest;
 
-	for (pc = 0; pc < attribute->code.code_length; )
+	for (pc = 0; pc < attribute->code.code_length && nbranch < MAX_BRANCHES; )
 	{
 		size = get_single_instruction(attribute->code.code + pc, &ins, pc);
 
@@ -570,7 +570,7 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 			nbranch += 1;
 			branch += 1;
 		}
-		else if ((ins.opcode >= OP_IFEQ && ins.opcode <= OP_JSR) || 
+		else if ((ins.opcode >= OP_IFEQ && ins.opcode <= OP_JSR) ||
 			ins.opcode == OP_IFNULL || ins.opcode == OP_IFNONNULL)
 		{
 			branch->pc = pc;
@@ -580,7 +580,7 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 		}
 		else if (ins.opcode == OP_TABLESWITCH)
 		{
-			for (i = 0; i <= ins.high - ins.low; i += 1)
+			for (i = 0; i <= ins.high - ins.low && nbranch < MAX_BRANCHES; i += 1)
 			{
 				branch->pc = pc;
 				branch->dest = pc + ins.branchoffsets[i];
@@ -588,14 +588,17 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 				branch += 1;
 			}
 
-			branch->pc = pc;
-			branch->dest = pc + ins.defaultoffset;
-			nbranch += 1;
-			branch += 1;
+			if (nbranch < MAX_BRANCHES)
+			{
+				branch->pc = pc;
+				branch->dest = pc + ins.defaultoffset;
+				nbranch += 1;
+				branch += 1;
+			}
 		}
 		else if (ins.opcode == OP_LOOKUPSWITCH)
 		{
-			for (i = 0; i < ins.npairs; i += 1)
+			for (i = 0; i < ins.npairs && nbranch < MAX_BRANCHES; i += 1)
 			{
 				branch->pc = pc;
 				branch->dest = pc + ins.branchoffsets[i];
@@ -603,17 +606,16 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 				branch += 1;
 			}
 
-			branch->pc = pc;
-			branch->dest = pc + ins.defaultoffset;
-			nbranch += 1;
-			branch += 1;
+			if (nbranch < MAX_BRANCHES)
+			{
+				branch->pc = pc;
+				branch->dest = pc + ins.defaultoffset;
+				nbranch += 1;
+				branch += 1;
+			}
 		}
 
-		if (nbranch >= MAX_BRANCHES)
-		{
-			fprintf(stderr, "Too many branches!\n");
-			exit(1);
-		}
+		free_single_instruction(&ins);
 
 		pc += size;
 		nins += 1;
@@ -622,6 +624,10 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 	fprintf(fp, "        // Code Length: %d bytes / %d instructions\n", attribute->code.code_length, nins);
 	fprintf(fp, "        // Max Stack: %hd, Max Locals: %hd, Attributes: %hd\n", attribute->code.max_stack, attribute->code.max_locals, attribute->code.attribute_count);
 	fprintf(fp, "        // Branches: %d\n", nbranch);
+
+	if (nbranch >= MAX_BRANCHES)
+		fprintf(fp, "        // (Branch Analysis incomplete)\n");
+
 	fprintf(fp, "\n");
 
 	for (pc = 0; pc < attribute->code.code_length; )
