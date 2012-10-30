@@ -529,7 +529,6 @@ uint32_t instruction_to_bytecode(Instruction* ins, unsigned char* code, uint32_t
 			*(int32_t*)(code + offset) = htobe32(ins->high);
 			offset += 4;
 
-			ins->branchoffsets = malloc((ins->high - ins->low + 1) * sizeof(int32_t));
 			for (i = 0; i <= ins->high - ins->low; i += 1)
 			{
 				*(int32_t*)(code + offset) = htobe32(ins->branchoffsets[i]);
@@ -547,9 +546,6 @@ uint32_t instruction_to_bytecode(Instruction* ins, unsigned char* code, uint32_t
 			offset += 4;
 			*(uint32_t*)(code + offset) = htobe32(ins->npairs);
 			offset += 4;
-
-			ins->matches = malloc(ins->npairs * sizeof(int32_t));
-			ins->branchoffsets = malloc(ins->npairs * sizeof(int32_t));
 
 			for (i = 0; i < ins->npairs; i += 1)
 			{
