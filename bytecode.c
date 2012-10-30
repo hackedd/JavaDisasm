@@ -252,23 +252,27 @@ void free_single_instruction(Instruction* ins)
 	}
 }
 
-void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, char* buf)
+int instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, int bufsize, char* buf)
 {
-	int i;
+	int i, outsize;
 	char casebuf[128];
 	Constant* c;
 
+	/* Longest opcode = 15 chars */
+	if (bufsize < 16) return 16;
+
 	strcpy(buf, OpcodeNames[ins->opcode]);
-	buf += strlen(buf);
+	outsize = strlen(buf);
+	buf += outsize;
 
 	switch (ins->opcode)
 	{
 		case OP_BIPUSH:
-			sprintf(buf, " %hhu", ins->uint8);
+			outsize += snprintf(buf, bufsize - outsize, " %hhu", ins->uint8);
 			break;
 
 		case OP_SIPUSH:
-			sprintf(buf, " %hu", ins->uint16);
+			outsize += snprintf(buf, bufsize - outsize, " %hu", ins->uint16);
 			break;
 
 		case OP_LDC:
@@ -288,7 +292,7 @@ void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, 
 		case OP_CHECKCAST:
 		case OP_INSTANCEOF:
 			c = find_constant(classFile, ins->constant);
-			sprintf(buf, " #%hu // %s", ins->constant, constant_to_string(classFile, c));
+			outsize += snprintf(buf, bufsize - outsize, " #%hu // %s", ins->constant, constant_to_string(classFile, c));
 			break;
 
 		case OP_ILOAD:
@@ -301,11 +305,11 @@ void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, 
 		case OP_FSTORE:
 		case OP_DSTORE:
 		case OP_ASTORE:
-			sprintf(buf, " %hhu", ins->varIndex);
+			outsize += snprintf(buf, bufsize - outsize, " %hhu", ins->varIndex);
 			break;
 
 		case OP_IINC:
-			sprintf(buf, " %hhu, %hhd", ins->varIndex, ins->value);
+			outsize += snprintf(buf, bufsize - outsize, " %hhu, %hhd", ins->varIndex, ins->value);
 			break;
 
 		case OP_IFEQ:
@@ -326,88 +330,73 @@ void instruction_to_string(ClassFile* classFile, Instruction* ins, uint32_t pc, 
 		case OP_JSR:
 		case OP_IFNULL:
 		case OP_IFNONNULL:
-			sprintf(buf, " %hd", pc + ins->branchoffset);
+			outsize += snprintf(buf, bufsize - outsize, " %hd", pc + ins->branchoffset);
 			break;
 
 		case OP_GOTO_W:
 		case OP_JSR_W:
-			sprintf(buf, " %d", pc + ins->branchoffset32);
+			outsize += snprintf(buf, bufsize - outsize, " %d", pc + ins->branchoffset32);
 			break;
 
 		case OP_RET:
-			sprintf(buf, " #%hhu", ins->varIndex);
+			outsize += snprintf(buf, bufsize - outsize, " #%hhu", ins->varIndex);
 			break;
 
 		case OP_NEWARRAY:
-			switch (ins->uint8)
-			{
-				case ATYPE_BOOLEAN:
-					strcat(buf, " boolean");
-					break;
-				case ATYPE_CHAR:
-					strcat(buf, " char");
-					break;
-				case ATYPE_FLOAT:
-					strcat(buf, " float");
-					break;
-				case ATYPE_DOUBLE:
-					strcat(buf, " double");
-					break;
-				case ATYPE_BYTE:
-					strcat(buf, " byte");
-					break;
-				case ATYPE_SHORT:
-					strcat(buf, " short");
-					break;
-				case ATYPE_INT:
-					strcat(buf, " int");
-					break;
-				case ATYPE_LONG:
-					strcat(buf, " long");
-					break;
-			}
+			if (ins->uint8 >= ATYPE_BOOLEAN && ins->uint8 <= ATYPE_LONG)
+				outsize += snprintf(buf, bufsize - outsize, " %s", ArrayTypeNames[ins->uint8]);
 			break;
 
 		case OP_MULTIANEWARRAY:
 			c = find_constant(classFile, ins->constant);
-			sprintf(buf, " #%hu, %hhu // %s", ins->constant, ins->dimensions, constant_to_string(classFile, c));
-			break;
-
-		case OP_TABLESWITCH:
-			strcat(buf, "\n        {\n");
-			for (i = 0; i <= ins->high - ins->low; i += 1)
-			{
-				sprintf(casebuf, "%d: %d\n", ins->low + i, pc + ins->branchoffsets[i]);
-				strcat(buf, "            ");
-				strcat(buf, casebuf);
-			}
-			sprintf(casebuf, "default: %d\n", pc + ins->defaultoffset);
-			strcat(buf, "            ");
-			strcat(buf, casebuf);
-			strcat(buf, "        }");
-			break;
-
-		case OP_LOOKUPSWITCH:
-			strcat(buf, "\n        {\n");
-			for (i = 0; i < ins->npairs; i += 1)
-			{
-				sprintf(casebuf, "%d: %d\n", ins->matches[i], pc + ins->branchoffsets[i]);
-				strcat(buf, "            ");
-				strcat(buf, casebuf);
-			}
-			sprintf(casebuf, "default: %d\n", pc + ins->defaultoffset);
-			strcat(buf, "            ");
-			strcat(buf, casebuf);
-			strcat(buf, "        }");
+			outsize += snprintf(buf, bufsize - outsize, " #%hu, %hhu // %s", ins->constant, ins->dimensions, constant_to_string(classFile, c));
 			break;
 
 		case OP_WIDE:
 			if (ins->opcode2 == OP_IINC)
-				sprintf(buf, " %s %hu %hd", OpcodeNames[ins->opcode2], ins->varIndex16, ins->value16);
+				outsize += snprintf(buf, bufsize - outsize, " %s %hu %hd", OpcodeNames[ins->opcode2], ins->varIndex16, ins->value16);
 			else
-				sprintf(buf, " %s %hu", OpcodeNames[ins->opcode2], ins->varIndex16);
+				outsize += snprintf(buf, bufsize - outsize, " %s %hu", OpcodeNames[ins->opcode2], ins->varIndex16);
 			break;
+
+#define _append(string)                     \
+	if (outsize + strlen(string) < bufsize) \
+		strcat(buf, string);                \
+	outsize += strlen(string);
+
+		case OP_TABLESWITCH:
+			_append("\n        {\n");
+			for (i = 0; i <= ins->high - ins->low; i += 1)
+			{
+				sprintf(casebuf, "%d: %d\n", ins->low + i, pc + ins->branchoffsets[i]);
+				_append("            ");
+				_append(casebuf);
+			}
+			sprintf(casebuf, "default: %d\n", pc + ins->defaultoffset);
+			_append("            ");
+			_append(casebuf);
+			_append("        }");
+			break;
+
+		case OP_LOOKUPSWITCH:
+			_append("\n        {\n");
+			for (i = 0; i < ins->npairs; i += 1)
+			{
+				sprintf(casebuf, "%d: %d\n", ins->matches[i], pc + ins->branchoffsets[i]);
+				_append("            ");
+				_append(casebuf);
+			}
+			sprintf(casebuf, "default: %d\n", pc + ins->defaultoffset);
+			_append("            ");
+			_append(casebuf);
+			_append("        }");
+			break;
+
+#undef _append
+
 	}
+
+	return outsize;
 }
 
 uint32_t instruction_to_bytecode(Instruction* ins, unsigned char* code, uint32_t pc)
@@ -638,7 +627,11 @@ void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 	for (pc = 0; pc < attribute->code.code_length; )
 	{
 		size = get_single_instruction(attribute->code.code + pc, &ins, pc);
-		instruction_to_string(classFile, &ins, pc, insbuf);
+
+		if (instruction_to_string(classFile, &ins, pc, sizeof(insbuf), insbuf) >= sizeof(insbuf))
+			strcpy(insbuf, "// Error: Unable to decode instruction");
+
+		free_single_instruction(&ins);
 
 		branchdest = 0;
 		for (i = 0, branch = branches; i < nbranch; i += 1, branch += 1)
