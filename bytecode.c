@@ -76,6 +76,20 @@ const char* OpcodeNames[256] = {
 	"impdep2",
 };
 
+const char* ArrayTypeNames[] = {
+	NULL, NULL, NULL, NULL,
+	"boolean", "char", "float", "double",
+	"byte", "short", "int", "long",
+};
+
+typedef struct
+{
+	uint32_t pc;
+	uint32_t dest;
+} Branch;
+
+#define MAX_BRANCHES 500
+
 uint32_t get_single_instruction(unsigned char* code, Instruction* ins, uint32_t pc)
 {
 	int offset, i;
@@ -538,14 +552,6 @@ uint32_t instruction_to_bytecode(Instruction* ins, unsigned char* code, uint32_t
 			return 1;
 	}
 }
-
-typedef struct
-{
-	uint32_t pc;
-	uint32_t dest;
-} Branch;
-
-#define MAX_BRANCHES 500
 
 void dump_code_attribute(FILE* fp, ClassFile* classFile, Attribute* attribute)
 {
