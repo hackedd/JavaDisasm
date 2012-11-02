@@ -260,14 +260,16 @@ int find_xor_key(ClassFile* classFile, unsigned char* key)
 
 int main(int argc, char** argv)
 {
-	int i, j, length, keylen, opt;
+	int i, j, k, length, keylen, opt;
 	ClassFile *classFile;
 	Constant *classRef, *className, *c, *string;
 	unsigned char key[128];
 	char classNameString[255];
 	uint32_t wbuffer[1024];
 
-	while ((opt = getopt(argc, argv, "vh")) != -1)
+	int output_as_java_array = 0;
+
+	while ((opt = getopt(argc, argv, "vhj")) != -1)
 	{
 		switch (opt)
 		{
@@ -275,11 +277,16 @@ int main(int argc, char** argv)
 				verbose += 1;
 				break;
 
+			case 'j':
+				output_as_java_array = 1;
+				break;
+
 			case 'h':
 			case '?':
 				printf("Usage: %s [options] CLASSFILE...\n"
 					"options:\n"
 					"  -v  increase verbosity (can be specified multiple times)\n"
+					"  -j  output strings as Java array\n"
 					"", argv[0]);
 				return optopt ? 1 : 0;
 		}
@@ -308,13 +315,19 @@ int main(int argc, char** argv)
 		{
 			if (verbose)
 			{
+				if (output_as_java_array)
+					printf("// ");
+
 				printf("%s  key: ", classNameString);
 				for (j = 0; j < keylen; j += 1)
 					printf("%02x ", key[j]);
 				printf("\n");
 			}
 
-			for (c = classFile->constants, j = 0; j < classFile->constant_count; j += 1, c += 1)
+			if (output_as_java_array)
+				printf("private static final String[] z = new String[] {\n");
+
+			for (c = classFile->constants, j = k = 0; j < classFile->constant_count; j += 1, c += 1)
 			{
 				if (c->tag != TAG_STRINGREF)
 					continue;
@@ -324,6 +337,9 @@ int main(int argc, char** argv)
 
 				if (verbose > 1)
 				{
+					if (output_as_java_array)
+						printf("// ");
+
 					printf("%s  raw: ", classNameString);
 					print_string(stdout, string->buffer);
 					printf("\n");
@@ -331,10 +347,24 @@ int main(int argc, char** argv)
 
 				xorcrypt(wbuffer, length - 1, key, keylen);
 
-				printf("%s %4d: ", classNameString, c->index);
-				print_string_w(stdout, wbuffer);
-				printf("\n");
+				if (output_as_java_array)
+				{
+					printf("\t/* %2d */ \"", k);
+					print_string_w(stdout, wbuffer);
+					printf("\",\n");
+				}
+				else
+				{
+					printf("%s %4d: ", classNameString, c->index);
+					print_string_w(stdout, wbuffer);
+					printf("\n");
+				}
+
+				k += 1;
 			}
+
+			if (output_as_java_array)
+				printf("};\n\n");
 		}
 
 		free_class(classFile);
