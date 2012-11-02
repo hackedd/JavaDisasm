@@ -70,7 +70,7 @@ int find_xor_key_in_method(ClassFile* classFile, Attribute* codeAttribute, unsig
 {
 	uint32_t pc, size;
 	Instruction ins;
-	int i;
+	int i, is_load;
 
 	for (pc = 0; pc < codeAttribute->code.code_length; )
 	{
@@ -81,15 +81,26 @@ int find_xor_key_in_method(ClassFile* classFile, Attribute* codeAttribute, unsig
 			if (verbose > 1)
 				fprintf(stderr, "Found tableswitch at %d, cases %d - %d\n", pc, ins.low, ins.high);
 
-			for (i = 0; i <= ins.high - ins.low; i += 1)
-				key[i] = find_xor_byte(codeAttribute, pc + ins.branchoffsets[i]);
-			key[i] = find_xor_byte(codeAttribute, pc + ins.defaultoffset);
-			return i + 1;
+			if (ins.high > 10)
+			{
+				if (verbose > 1)
+					fprintf(stderr, "  Discarding, too many cases\n");
+			}
+			else
+			{
+				for (i = 0; i <= ins.high - ins.low; i += 1)
+					key[i] = find_xor_byte(codeAttribute, pc + ins.branchoffsets[i]);
+				key[i] = find_xor_byte(codeAttribute, pc + ins.defaultoffset);
+				return i + 1;
+			}
 		}
 
-		if (recursive && (ins.opcode == OP_ALOAD || (ins.opcode >= OP_ALOAD_0 && ins.opcode <= OP_ALOAD_3)))
+		if (recursive)
 		{
-			if ((i = find_xor_method(classFile, codeAttribute, pc + size, key)) > 0)
+			is_load  = ins.opcode == OP_ALOAD;
+			is_load |= ins.opcode >= OP_ALOAD_0 && ins.opcode <= OP_ALOAD_3;
+			is_load |= ins.opcode == OP_LDC || ins.opcode == OP_LDC_W;
+			if (is_load && (i = find_xor_method(classFile, codeAttribute, pc + size, key)) > 0)
 				return i;
 		}
 
@@ -110,27 +121,35 @@ int find_xor_method(ClassFile* classFile, Attribute* codeAttribute, uint32_t pc,
 
     // aload_0
     // { iconst_0-5 bipush 6-127 sipush 127-32767 }
-    // { ldc, ldc_w }
-    // invokestatic #175 // char[] com.whatsapp.App.z(java.lang.String param0)
-    // invokestatic #178 // java.lang.String com.whatsapp.App.z(char[] param0)
+    // * { ldc, ldc_w }
+    // * invokestatic #175 // char[] com.whatsapp.App.z(java.lang.String param0)
+    // * invokestatic #178 // java.lang.String com.whatsapp.App.z(char[] param0)
     // aastore
 
 	size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
-	if ((ins.opcode < OP_ICONST_0 || ins.opcode > OP_ICONST_5) && ins.opcode != OP_BIPUSH && ins.opcode != OP_SIPUSH)
-		return 0;
 	pc += size;
 
-	size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
-	if (ins.opcode != OP_LDC && ins.opcode != OP_LDC_W)
-		return 0;
-	pc += size;
-
-	size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
 	if (ins.opcode != OP_INVOKESTATIC)
-		return 0;
-	pc += size;
+	{
+		if ((ins.opcode < OP_ICONST_0 || ins.opcode > OP_ICONST_5) && ins.opcode != OP_BIPUSH && ins.opcode != OP_SIPUSH)
+			return 0;
+
+		size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
+		pc += size;
+
+		if (ins.opcode != OP_LDC && ins.opcode != OP_LDC_W)
+			return 0;
+
+		size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
+		pc += size;
+
+		if (ins.opcode != OP_INVOKESTATIC)
+			return 0;
+	}
 
 	size = get_single_instruction(codeAttribute->code.code + pc, &ins, pc);
+	pc += size;
+
 	if (ins.opcode != OP_INVOKESTATIC)
 		return 0;
 
@@ -162,7 +181,7 @@ int find_xor_method(ClassFile* classFile, Attribute* codeAttribute, uint32_t pc,
 	}
 
 	if (methodType.type == TYPE_METHOD && strcmp(methodType.returnType->name, "java.lang.String") == 0 &&
-		methodType.param_count == 1 && methodType.params[0].type == TYPE_ARRAY && 
+		methodType.param_count == 1 && methodType.params[0].type == TYPE_ARRAY &&
 		strcmp(methodType.params[0].elementType->name, "char") == 0)
 	{
 		if (verbose > 1)
