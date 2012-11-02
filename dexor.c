@@ -27,7 +27,7 @@ void xorcrypt(uint32_t* buf, int length, unsigned char* key, int keylen)
 	{
 		if (in[0] == 0xFFFD && in[1] == 0xFFFD)
 		{
-			// Apparently, some obfuscators cause a NUL char to be output as 
+			// Apparently, some obfuscators cause a NUL char to be output as
 			// two Unicode Replacement chars.
 			*out++ = key[k];
 			in += 2;
@@ -264,6 +264,7 @@ int main(int argc, char** argv)
 	ClassFile *classFile;
 	Constant *classRef, *className, *c, *string;
 	unsigned char key[128];
+	char classNameString[255];
 	uint32_t wbuffer[1024];
 
 	while ((opt = getopt(argc, argv, "vh")) != -1)
@@ -296,16 +297,18 @@ int main(int argc, char** argv)
 		classRef = find_constant(classFile, classFile->this_class);
 		className = find_constant(classFile, classRef->ref);
 
+		strcpy(classNameString, class_name_from_internal(className->buffer));
+
 		key[0] = '\0';
 		if ((keylen = find_xor_key(classFile, key)) == 0)
 		{
-			fprintf(stderr, "%s: Unable to find XOR key (%s)\n", class_name_from_internal(className->buffer), key);
+			fprintf(stderr, "%s: Unable to find XOR key (%s)\n", classNameString, key);
 		}
 		else
 		{
 			if (verbose)
 			{
-				printf("%s  key: ", class_name_from_internal(className->buffer));
+				printf("%s  key: ", classNameString);
 				for (j = 0; j < keylen; j += 1)
 					printf("%02x ", key[j]);
 				printf("\n");
@@ -321,14 +324,14 @@ int main(int argc, char** argv)
 
 				if (verbose > 1)
 				{
-					printf("%s  raw: ", class_name_from_internal(className->buffer));
+					printf("%s  raw: ", classNameString);
 					print_string(stdout, string->buffer);
 					printf("\n");
 				}
 
 				xorcrypt(wbuffer, length - 1, key, keylen);
 
-				printf("%s %4d: ", class_name_from_internal(className->buffer), c->index);
+				printf("%s %4d: ", classNameString, c->index);
 				print_string_w(stdout, wbuffer);
 				printf("\n");
 			}
